@@ -4,6 +4,27 @@ A browser-based gesture drawing experience where you draw shapes in the air usin
 
 > **Disclaimer**: This project was built in about 6 hours, so expect bugs! If you encounter any issues or have suggestions, feel free to open an issue or leave feedback. I'd love to hear what you think! Also, feel free to fork this project and make your own version of it.
 
+<p align="center">
+
+  <!-- Visit Website Button -->
+  <a href="https://debojeet-bhowmick.netlify.app" target="_blank">
+    <img src="https://img.shields.io/badge/🌐_Visit_My_Website-000000?style=for-the-badge&logo=google-chrome&logoColor=white" />
+  </a>
+
+  <!-- Buy Me a Coffee Button -->
+  <a href="https://www.buymeacoffee.com/debojeet_bhowmick" target="_blank">
+    <img src="https://img.shields.io/badge/☕_Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" />
+  </a>
+
+  <!-- UPI Donation Button -->
+  <a href="https://d3b0j33t.github.io/Support-For-My-Work/" target="_blank">
+    <img src="https://img.shields.io/badge/💳Contribute_With_UPI-1A73E8?style=for-the-badge&logo=google-pay&logoColor=white" />
+  </a>
+
+</p>
+
+---
+
 ## Recent Updates
 
 - **Draggable Camera Preview** - Move the camera preview anywhere on screen so it doesn't block your creations. Double-click to reset position.
@@ -31,21 +52,21 @@ A browser-based gesture drawing experience where you draw shapes in the air usin
 
 ## Gesture Controls
 
-| Gesture | Action |
-|---------|--------|
-| Point (index finger) | Draw in the air |
-| Open Palm (hold) | Close shape and inflate to 3D |
-| Pinch | Grab and move objects |
-| Swipe | Remove individual object |
+| Gesture              | Action                        |
+| -------------------- | ----------------------------- |
+| Point (index finger) | Draw in the air               |
+| Open Palm (hold)     | Close shape and inflate to 3D |
+| Pinch                | Grab and move objects         |
+| Swipe                | Remove individual object      |
 
 ## UI Controls
 
-| Control | Action |
-|---------|--------|
-| Clear All button | Remove all objects |
-| Color swatches | Change drawing color |
-| Camera preview | Drag to move, double-click to reset |
-| Expand button (on preview) | Toggle larger preview |
+| Control                    | Action                              |
+| -------------------------- | ----------------------------------- |
+| Clear All button           | Remove all objects                  |
+| Color swatches             | Change drawing color                |
+| Camera preview             | Drag to move, double-click to reset |
+| Expand button (on preview) | Toggle larger preview               |
 
 ## Installation
 
@@ -118,24 +139,37 @@ Found a bug? Have an idea? I'd love to hear from you!
 - Fork and submit a pull request
 - Share your own version built on this project
 
-## Credits
+## 🤝 Let’s Collaborate
 
-Designed by [Debojeet Bhowmick](https://www.instagram.com/debojeet_bhowmick/)
+| Platform     | Link                                                                         |
+| ------------ | ---------------------------------------------------------------------------- |
+| 🌐 Website   | [debojeet-bhowmick.netlify.app](https://debojeet-bhowmick.netlify.app)       |
+| 📧 Email     | [debojeet9279.ckp@gmail.com](mailto:debojeet9279.ckp@gmail.com)              |
+| 🔗 LinkedIn  | [LinkedIn Profile](https://www.linkedin.com/in/debojeet-bhowmick-a95373266/) |
+| 📞 Phone     | [**+91 9835418245**](tel:+919835418245)                                      |
+| 📸 Instagram | [@debojeet_bhowmick](https://www.instagram.com/debojeet_bhowmick/)           |
+| 🎥 YouTube   | [YouTube Channel](https://www.youtube.com/channel/UCrxag8szJ24xzIeBRtwUyoQ)  |
 
-### Open Source Libraries
+---
+
+## 🔮 Final Words
+
+> “If you're aiming to create not just software, but systems that _stick_, let’s connect. Together, we can build something truly unforgettable.”
+
+---
+
+## 📜 Open Source Libraries
 
 This project is built with these amazing open source libraries:
 
-| Library | Description | License |
-|---------|-------------|---------|
-| [Three.js](https://threejs.org/) | 3D graphics library for WebGL rendering | MIT |
-| [MediaPipe Hands](https://google.github.io/mediapipe/solutions/hands.html) | Google's real-time hand tracking solution | Apache 2.0 |
-| [GSAP](https://greensock.com/gsap/) | Professional-grade animation library | GreenSock License |
-| [PeerJS](https://peerjs.com/) | WebRTC peer-to-peer connections made easy | MIT |
-| [Vite](https://vitejs.dev/) | Next-generation frontend build tool | MIT |
-| [TypeScript](https://www.typescriptlang.org/) | Typed superset of JavaScript | Apache 2.0 |
-
-Thank you to all the maintainers and contributors of these projects!
+| Library                                                                    | Description                               | License           |
+| -------------------------------------------------------------------------- | ----------------------------------------- | ----------------- |
+| [Three.js](https://threejs.org/)                                           | 3D graphics library for WebGL rendering   | MIT               |
+| [MediaPipe Hands](https://google.github.io/mediapipe/solutions/hands.html) | Google's real-time hand tracking solution | Apache 2.0        |
+| [GSAP](https://greensock.com/gsap/)                                        | Professional-grade animation library      | GreenSock License |
+| [PeerJS](https://peerjs.com/)                                              | WebRTC peer-to-peer connections made easy | MIT               |
+| [Vite](https://vitejs.dev/)                                                | Next-generation frontend build tool       | MIT               |
+| [TypeScript](https://www.typescriptlang.org/)                              | Typed superset of JavaScript              | Apache 2.0        |
 
 ## License
 
