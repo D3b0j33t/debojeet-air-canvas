@@ -51,14 +51,14 @@ A browser-based gesture drawing experience where you draw shapes in the air usin
 
 ```bash
 # Clone the repository
-git clone https://github.com/janusdesigns/air-canvas.git
-cd air-canvas
+git clone https://github.com/D3b0j33t/debojeet-air-canvas.git
+cd debojeet-air-canvas
 
 # Install dependencies
-npm install
+npm install || yarn install || bun install || pnpm install
 
 # Start development server
-npm run dev
+npm run dev || yarn dev || bun dev || pnpm run dev
 ```
 
 Then open your browser to the local URL shown in the terminal (usually `http://localhost:5173`).
@@ -77,6 +77,7 @@ Then open your browser to the local URL shown in the terminal (usually `http://l
 - **Three.js** - 3D rendering and scene management
 - **MediaPipe Hands** - Real-time hand tracking
 - **GSAP** - Smooth animations
+- **PeerJS** - For Multiplayer Support (Invite friends)
 
 ## Mouse/Touch Controls
 
@@ -119,7 +120,7 @@ Found a bug? Have an idea? I'd love to hear from you!
 
 ## Credits
 
-Designed by [Janus Tiu](https://www.instagram.com/janustiu/)
+Designed by [Debojeet Bhowmick](https://www.instagram.com/debojeet_bhowmick/)
 
 ### Open Source Libraries
 
