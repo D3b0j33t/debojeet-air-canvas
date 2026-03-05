@@ -9,6 +9,14 @@ export class Scene3D {
   private directionalLight!: THREE.DirectionalLight;
   private clock: THREE.Clock;
 
+  // Particle system
+  private particles!: THREE.Points;
+  private particleCount = 600;
+  private particleVelocities: Float32Array;
+
+  // Environment map for reflections
+  private envMap: THREE.CubeTexture | null = null;
+
   // Camera orbit controls
   private cameraDistance = SCENE.CAMERA_Z;
   private cameraTheta = 0;  // horizontal angle
@@ -41,8 +49,20 @@ export class Scene3D {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
 
+    // Allocate velocity array
+    this.particleVelocities = new Float32Array(this.particleCount * 3);
+
     // Setup lighting
     this.setupLighting();
+
+    // Setup particles
+    this.setupParticles();
+
+    // Generate environment map
+    this.envMap = this.generateEnvMap();
+
+    // Add ground shadow plane
+    this.setupGroundPlane();
 
     // Clock for animations
     this.clock = new THREE.Clock();
@@ -79,6 +99,150 @@ export class Scene3D {
     this.scene.add(rimLight);
   }
 
+  private setupParticles(): void {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(this.particleCount * 3);
+    const colors = new Float32Array(this.particleCount * 3);
+    const sizes = new Float32Array(this.particleCount);
+
+    for (let i = 0; i < this.particleCount; i++) {
+      // Spread across a large volume
+      positions[i * 3] = (Math.random() - 0.5) * 30;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+
+      // Velocities (slow drift)
+      this.particleVelocities[i * 3] = (Math.random() - 0.5) * 0.02;
+      this.particleVelocities[i * 3 + 1] = Math.random() * 0.01 + 0.005;
+      this.particleVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.01;
+
+      // Warm green/gold sparkle colors matching the app theme
+      const colorChoice = Math.random();
+      if (colorChoice < 0.4) {
+        // Green-ish
+        colors[i * 3] = 0.65 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.85 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.4 + Math.random() * 0.15;
+      } else if (colorChoice < 0.7) {
+        // Gold
+        colors[i * 3] = 0.95 + Math.random() * 0.05;
+        colors[i * 3 + 1] = 0.85 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.5 + Math.random() * 0.2;
+      } else {
+        // White sparkle
+        colors[i * 3] = 0.9 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+      }
+
+      sizes[i] = Math.random() * 3 + 0.5;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.08,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+
+    this.particles = new THREE.Points(geometry, material);
+    this.scene.add(this.particles);
+  }
+
+  /** Animate particles each frame */
+  updateParticles(): void {
+    const positions = this.particles.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const arr = positions.array as Float32Array;
+
+    for (let i = 0; i < this.particleCount; i++) {
+      arr[i * 3] += this.particleVelocities[i * 3];
+      arr[i * 3 + 1] += this.particleVelocities[i * 3 + 1];
+      arr[i * 3 + 2] += this.particleVelocities[i * 3 + 2];
+
+      // Wrap around when out of bounds
+      if (arr[i * 3 + 1] > 10) arr[i * 3 + 1] = -10;
+      if (arr[i * 3] > 15) arr[i * 3] = -15;
+      if (arr[i * 3] < -15) arr[i * 3] = 15;
+      if (arr[i * 3 + 2] > 10) arr[i * 3 + 2] = -10;
+      if (arr[i * 3 + 2] < -10) arr[i * 3 + 2] = 10;
+    }
+
+    positions.needsUpdate = true;
+  }
+
+  private generateEnvMap(): THREE.CubeTexture {
+    // Create a procedural environment map from canvas
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const faces: HTMLCanvasElement[] = [];
+
+    // Generate 6 faces with different gradient angles for variety
+    const faceColors: [string, string][] = [
+      ['#1a2a1a', '#2d4a2d'], // +X
+      ['#0d160d', '#1a2a1a'], // -X
+      ['#2d4a2d', '#3d6a3d'], // +Y (top — brighter)
+      ['#080a08', '#0d160d'], // -Y (bottom — darker)
+      ['#1a2a1a', '#2a3a2a'], // +Z
+      ['#0d160d', '#1a2a1a'], // -Z
+    ];
+
+    for (const [c1, c2] of faceColors) {
+      const faceCanvas = document.createElement('canvas');
+      faceCanvas.width = size;
+      faceCanvas.height = size;
+      const faceCtx = faceCanvas.getContext('2d')!;
+
+      const grad = faceCtx.createLinearGradient(0, 0, 0, size);
+      grad.addColorStop(0, c1);
+      grad.addColorStop(0.5, c2);
+      grad.addColorStop(1, c1);
+      faceCtx.fillStyle = grad;
+      faceCtx.fillRect(0, 0, size, size);
+
+      // Add subtle noise
+      for (let i = 0; i < 200; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        faceCtx.fillStyle = `rgba(190, 225, 125, ${Math.random() * 0.03})`;
+        faceCtx.fillRect(x, y, 1, 1);
+      }
+
+      faces.push(faceCanvas);
+    }
+
+    const cubeTexture = new THREE.CubeTexture(faces);
+    cubeTexture.needsUpdate = true;
+
+    this.scene.environment = cubeTexture;
+    return cubeTexture;
+  }
+
+  private setupGroundPlane(): void {
+    const groundGeometry = new THREE.PlaneGeometry(30, 30);
+    const groundMaterial = new THREE.ShadowMaterial({
+      opacity: 0.15,
+    });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -3.5;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+  }
+
+  getEnvMap(): THREE.CubeTexture | null {
+    return this.envMap;
+  }
+
   resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
@@ -94,6 +258,8 @@ export class Scene3D {
   }
 
   render(): void {
+    // Update particles each frame
+    this.updateParticles();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -111,6 +277,10 @@ export class Scene3D {
 
   getScene(): THREE.Scene {
     return this.scene;
+  }
+
+  getRenderer(): THREE.WebGLRenderer {
+    return this.renderer;
   }
 
   // Convert screen coordinates to 3D world position
@@ -137,17 +307,36 @@ export class Scene3D {
     return pos;
   }
 
-  // Create a balloon-like material
+  // Create a balloon-like material with fresnel rim glow
   createBalloonMaterial(color: string): THREE.MeshStandardMaterial {
     const threeColor = new THREE.Color(color);
 
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       color: threeColor,
-      roughness: 0.4,
-      metalness: 0.0,
-      envMapIntensity: 0.5,
+      roughness: 0.3,
+      metalness: 0.05,
+      envMap: this.envMap,
+      envMapIntensity: 0.8,
       side: THREE.DoubleSide
     });
+
+    // Inject fresnel rim glow via onBeforeCompile
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <output_fragment>',
+        `
+        // Fresnel rim glow
+        vec3 viewDir = normalize(vViewPosition);
+        vec3 worldNormal = normalize(vNormal);
+        float fresnelTerm = pow(1.0 - abs(dot(viewDir, worldNormal)), 3.0);
+        vec3 rimColor = vec3(${(threeColor.r * 1.3).toFixed(2)}, ${(threeColor.g * 1.3).toFixed(2)}, ${(threeColor.b * 1.3).toFixed(2)});
+        gl_FragColor.rgb += rimColor * fresnelTerm * 0.4;
+        #include <output_fragment>
+        `
+      );
+    };
+
+    return mat;
   }
 
   // Raycast to find objects at screen position

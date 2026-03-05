@@ -6,11 +6,16 @@ export class BalloonInflator {
   private camera: THREE.PerspectiveCamera;
   private canvasWidth: number;
   private canvasHeight: number;
+  private envMap: THREE.CubeTexture | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, canvasWidth: number, canvasHeight: number) {
     this.camera = camera;
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
+  }
+
+  setEnvMap(envMap: THREE.CubeTexture | null): void {
+    this.envMap = envMap;
   }
 
   updateSize(width: number, height: number): void {
@@ -44,13 +49,41 @@ export class BalloonInflator {
     // Subdivide and smooth the geometry for balloon effect
     geometry = this.inflateGeometry(geometry);
 
-    // Create material with the stroke color
+    // Create enhanced material with fresnel and env reflections
+    const threeColor = new THREE.Color(stroke.color);
+    const hsl = { h: 0, s: 0, l: 0 };
+    threeColor.getHSL(hsl);
+
+    // Slightly more saturated and brighter version for rim
+    const rimColor = new THREE.Color().setHSL(hsl.h, Math.min(hsl.s * 1.2, 1), Math.min(hsl.l * 1.3, 1));
+
     const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(stroke.color),
-      roughness: 0.35,
-      metalness: 0.0,
-      side: THREE.DoubleSide
+      color: threeColor,
+      roughness: 0.28,
+      metalness: 0.05,
+      envMap: this.envMap,
+      envMapIntensity: 0.9,
+      side: THREE.DoubleSide,
     });
+
+    // Inject fresnel rim glow shader code
+    material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `
+        // Fresnel rim glow for balloon effect
+        vec3 viewDirection = normalize(vViewPosition);
+        float fresnelTerm = pow(1.0 - abs(dot(viewDirection, normalize(vNormal))), 3.5);
+        vec3 rimGlow = vec3(${rimColor.r.toFixed(3)}, ${rimColor.g.toFixed(3)}, ${rimColor.b.toFixed(3)});
+        gl_FragColor.rgb += rimGlow * fresnelTerm * 0.5;
+        // Subtle iridescence
+        float iriShift = fresnelTerm * 0.15;
+        gl_FragColor.r += iriShift * 0.3;
+        gl_FragColor.b += iriShift * 0.5;
+        #include <dithering_fragment>
+        `
+      );
+    };
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;

@@ -10,8 +10,16 @@ export class DrawingCanvas {
   private currentStroke: Stroke | null = null;
   private completedStrokes: Stroke[] = [];
   private livePosition: Point2D | null = null;
-  private filteredPosition: Point2D | null = null;  // Position after jitter filter
-  private recentPoints: Point2D[] = [];  // Buffer for smoothing
+  private filteredPosition: Point2D | null = null;
+  private recentPoints: Point2D[] = [];
+
+  // For velocity-sensitive width
+  private lastPointTime = 0;
+  private lastPointPos: Point2D | null = null;
+  private currentVelocity = 0;
+
+  // Brush size multiplier (from UI slider)
+  private _brushSize = 1.0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -24,6 +32,14 @@ export class DrawingCanvas {
     this.ctx.imageSmoothingQuality = 'high';
   }
 
+  get brushSize(): number {
+    return this._brushSize;
+  }
+
+  set brushSize(val: number) {
+    this._brushSize = Math.max(0.3, Math.min(3.0, val));
+  }
+
   resize(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
@@ -33,15 +49,20 @@ export class DrawingCanvas {
   }
 
   startStroke(point: Point2D, color: string): void {
+    const baseWidth = STROKE.WIDTH * this._brushSize;
     this.currentStroke = {
       points: [point],
+      widths: [baseWidth],
       color,
-      width: STROKE.WIDTH,
+      width: baseWidth,
       closed: false
     };
     this.livePosition = point;
     this.filteredPosition = point;
     this.recentPoints = [point];
+    this.lastPointTime = performance.now();
+    this.lastPointPos = point;
+    this.currentVelocity = 0;
   }
 
   addPoint(point: Point2D): void {
@@ -65,8 +86,29 @@ export class DrawingCanvas {
 
     // Only add points that are far enough apart
     if (dist >= STROKE.MIN_POINT_DISTANCE) {
+      // Calculate velocity-based width
+      const now = performance.now();
+      const dt = (now - this.lastPointTime) / 1000;
+      if (dt > 0 && this.lastPointPos) {
+        const velocity = dist / dt;
+        // Smooth velocity
+        this.currentVelocity = this.currentVelocity * 0.6 + velocity * 0.4;
+      }
+      this.lastPointTime = now;
+      this.lastPointPos = smoothed;
+
+      // Fast = thin, slow = thick
+      const velocityWidth = STROKE.WIDTH_MAX - (this.currentVelocity * STROKE.VELOCITY_SCALE);
+      const clampedWidth = Math.max(STROKE.WIDTH_MIN, Math.min(STROKE.WIDTH_MAX, velocityWidth));
+      const finalWidth = clampedWidth * this._brushSize;
+
       this.currentStroke.points.push(smoothed);
+      this.currentStroke.widths.push(finalWidth);
     }
+  }
+
+  getVelocity(): number {
+    return this.currentVelocity;
   }
 
   // Filter out jitter - only update if movement is significant
@@ -78,12 +120,10 @@ export class DrawingCanvas {
 
     const dist = this.distance(point, this.filteredPosition);
 
-    // If movement is below threshold, ignore it (return last position)
     if (dist < JITTER_THRESHOLD) {
       return this.filteredPosition;
     }
 
-    // Movement is significant - update filtered position
     this.filteredPosition = point;
     return point;
   }
@@ -94,7 +134,6 @@ export class DrawingCanvas {
       return { x: 0, y: 0 };
     }
 
-    // Simple average of all points in buffer
     let sumX = 0, sumY = 0;
     for (const p of this.recentPoints) {
       sumX += p.x;
@@ -130,23 +169,20 @@ export class DrawingCanvas {
 
   pauseStroke(): void {
     // Stroke remains but we stop adding points
-    // The stroke is kept for potential closing
   }
 
   closeStroke(): Stroke | null {
     if (!this.currentStroke) return null;
 
-    // Check if stroke is long enough
     const length = this.calculateStrokeLength();
     if (length < GESTURE.MIN_STROKE_LENGTH) {
       this.discardStroke();
       return null;
     }
 
-    // Close the path by connecting last point to first
     if (this.currentStroke.points.length > 2) {
       this.currentStroke.closed = true;
-      const closedStroke = { ...this.currentStroke };
+      const closedStroke = { ...this.currentStroke, widths: [...this.currentStroke.widths] };
       this.completedStrokes.push(closedStroke);
       this.currentStroke = null;
       return closedStroke;
@@ -204,33 +240,70 @@ export class DrawingCanvas {
   private renderStrokeWithLiveExtension(stroke: Stroke, alpha: number): void {
     if (stroke.points.length === 0) return;
 
+    // Build points array including live position
+    let points = [...stroke.points];
+    let widths = [...stroke.widths];
+    if (this.livePosition) {
+      points.push(this.livePosition);
+      widths.push(widths[widths.length - 1] || stroke.width);
+    }
+
+    // Draw neon glow layer (wider, blurred)
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha * 0.25;
+    this.ctx.strokeStyle = stroke.color;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.filter = 'blur(6px)';
+    this.drawVariableWidthCurve(points, widths, 2.5);
+    this.ctx.restore();
+
+    // Draw main stroke with variable width
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
-    this.ctx.fillStyle = stroke.color;
     this.ctx.strokeStyle = stroke.color;
-    this.ctx.lineWidth = stroke.width;
+    this.ctx.fillStyle = stroke.color;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
 
-    // Build points array including live position
-    let points = [...stroke.points];
-    if (this.livePosition) {
-      points.push(this.livePosition);
-    }
-
-    // If only one point, draw a dot
     if (points.length === 1) {
       this.ctx.beginPath();
-      this.ctx.arc(points[0].x, points[0].y, stroke.width / 2, 0, Math.PI * 2);
+      this.ctx.arc(points[0].x, points[0].y, (widths[0] || stroke.width) / 2, 0, Math.PI * 2);
       this.ctx.fill();
       this.ctx.restore();
       return;
     }
 
-    // Use smooth bezier curves
-    this.drawSmoothCurve(points);
-    this.ctx.stroke();
+    this.drawVariableWidthCurve(points, widths, 1.0);
     this.ctx.restore();
+  }
+
+  /** Draw stroke segments with per-point width for velocity sensitivity */
+  private drawVariableWidthCurve(points: Point2D[], widths: number[], widthMultiplier: number): void {
+    if (points.length < 2) return;
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i];
+      const p1 = points[i + 1];
+      const w0 = (widths[i] || STROKE.WIDTH) * widthMultiplier;
+      const w1 = (widths[i + 1] || STROKE.WIDTH) * widthMultiplier;
+      const avgWidth = (w0 + w1) / 2;
+
+      this.ctx.lineWidth = avgWidth;
+      this.ctx.beginPath();
+      this.ctx.moveTo(p0.x, p0.y);
+
+      if (i < points.length - 2) {
+        // Quadratic curve to midpoint for smoothness
+        const p2 = points[i + 2];
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        this.ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+      } else {
+        this.ctx.lineTo(p1.x, p1.y);
+      }
+      this.ctx.stroke();
+    }
   }
 
   // Smooth curve using cubic bezier with calculated control points
@@ -245,21 +318,17 @@ export class DrawingCanvas {
       return;
     }
 
-    // Use quadratic curves through midpoints for smooth result
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = points[i];
       const p1 = points[i + 1];
 
       if (i === 0) {
-        // First segment: line to midpoint
         const midX = (p0.x + p1.x) / 2;
         const midY = (p0.y + p1.y) / 2;
         this.ctx.lineTo(midX, midY);
       } else if (i === points.length - 2) {
-        // Last segment: curve to end point
         this.ctx.quadraticCurveTo(p0.x, p0.y, p1.x, p1.y);
       } else {
-        // Middle segments: curve to midpoint
         const midX = (p0.x + p1.x) / 2;
         const midY = (p0.y + p1.y) / 2;
         this.ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
@@ -270,15 +339,31 @@ export class DrawingCanvas {
   private renderStroke(stroke: Stroke, alpha: number): void {
     if (stroke.points.length === 0) return;
 
+    let points = [...stroke.points];
+    let widths = [...stroke.widths];
+    if (stroke.closed) {
+      points.push(stroke.points[0]);
+      widths.push(widths[0] || stroke.width);
+    }
+
+    // Subtle glow for completed strokes
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha * 0.15;
+    this.ctx.strokeStyle = stroke.color;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.filter = 'blur(4px)';
+    this.drawVariableWidthCurve(points, widths, 2.0);
+    this.ctx.restore();
+
+    // Main completed stroke
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
     this.ctx.fillStyle = stroke.color;
     this.ctx.strokeStyle = stroke.color;
-    this.ctx.lineWidth = stroke.width;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
 
-    // If only one point, draw a dot
     if (stroke.points.length === 1) {
       this.ctx.beginPath();
       this.ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
@@ -287,13 +372,7 @@ export class DrawingCanvas {
       return;
     }
 
-    // Use smooth curves
-    let points = [...stroke.points];
-    if (stroke.closed) {
-      points.push(stroke.points[0]);  // Close the loop
-    }
-    this.drawSmoothCurve(points);
-    this.ctx.stroke();
+    this.drawVariableWidthCurve(points, widths, 1.0);
     this.ctx.restore();
   }
 
@@ -333,7 +412,7 @@ export class DrawingCanvas {
   private drawStrokePath(stroke: Stroke): void {
     let points = [...stroke.points];
     if (stroke.closed) {
-      points.push(stroke.points[0]);  // Close the loop
+      points.push(stroke.points[0]);
     }
     this.drawSmoothCurve(points);
   }

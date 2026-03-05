@@ -147,25 +147,25 @@ export class GestureDetector {
     const tip = lm[tipIdx];
     const pip = lm[pipIdx];
 
-    // Finger is extended if tip is further from palm than pip
-    // Using y-coordinate primarily since fingers extend upward
-    const tipToPalm = this.distance(tip, lm[LANDMARKS.WRIST]);
-    const pipToPalm = this.distance(pip, lm[LANDMARKS.WRIST]);
+    // A finger is extended if its tip is further from the wrist than its PIP joint
+    const tipToWrist = this.distance(tip, lm[LANDMARKS.WRIST]);
+    const pipToWrist = this.distance(pip, lm[LANDMARKS.WRIST]);
 
-    return tipToPalm > pipToPalm * GESTURE.FINGER_CURL_THRESHOLD;
+    return tipToWrist > pipToWrist * 1.05;
   }
 
   private isThumbExtended(landmarks: HandLandmarks): boolean {
     const lm = landmarks.landmarks;
     const thumbTip = lm[LANDMARKS.THUMB_TIP];
     const thumbIp = lm[LANDMARKS.THUMB_IP];
-    const indexMcp = lm[LANDMARKS.INDEX_MCP];
+    const pinkyMcp = lm[LANDMARKS.PINKY_MCP];
 
-    // Thumb is extended if tip is far from index MCP
-    const distFromIndex = this.distance(thumbTip, indexMcp);
-    const thumbLength = this.distance(thumbTip, thumbIp);
+    // The thumb is extended if its tip is further from the far side of the hand (Pinky MCP)
+    // than its inner joint (IP) is.
+    const tipToPinky = this.distance(thumbTip, pinkyMcp);
+    const ipToPinky = this.distance(thumbIp, pinkyMcp);
 
-    return distFromIndex > thumbLength * 1.5;
+    return tipToPinky > ipToPinky * 1.05;
   }
 
   private isPointingIndex(landmarks: HandLandmarks): boolean {

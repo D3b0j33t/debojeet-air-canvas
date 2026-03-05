@@ -5,6 +5,8 @@ import { HandVisualizer } from './handVisualizer';
 import { Scene3D } from './scene3D';
 import { ObjectManager } from './objectManager';
 import { Multiplayer, MultiplayerEvent } from './multiplayer';
+import { AudioManager } from './audioManager';
+import { UndoManager, CreateBalloonAction, RemoveBalloonAction } from './undoManager';
 import { HandLandmarks, GestureState, BalloonObject, Stroke } from './types';
 import { GESTURE, TIMING } from './constants';
 
@@ -17,6 +19,8 @@ class AirCanvas {
   private scene3D: Scene3D;
   private objectManager: ObjectManager;
   private multiplayer: Multiplayer;
+  private audioManager: AudioManager;
+  private undoManager: UndoManager;
 
   // Preview components
   private previewVideo: HTMLVideoElement;
@@ -59,6 +63,9 @@ class AirCanvas {
   private previewStartLeft = 0;
   private previewStartTop = 0;
 
+  // Draw sound state
+  private isPlayingDrawSound = false;
+
   constructor() {
     // Get DOM elements
     const videoElement = document.getElementById('webcam') as HTMLVideoElement;
@@ -94,6 +101,11 @@ class AirCanvas {
       window.innerHeight
     );
     this.multiplayer = new Multiplayer();
+    this.audioManager = new AudioManager();
+    this.undoManager = new UndoManager();
+
+    // Pass env map to inflator via objectManager
+    this.objectManager.setEnvMap(this.scene3D.getEnvMap());
 
     // Set initial size
     this.resize();
@@ -103,6 +115,11 @@ class AirCanvas {
     this.setupButtonListeners();
     this.setupPreviewDrag();
     this.setupMultiplayer();
+    this.setupKeyboardShortcuts();
+    this.setupOnboarding();
+
+    // Update undo/redo button states
+    this.undoManager.onChange(() => this.updateUndoRedoButtons());
 
     // Start the application
     this.init();
@@ -137,6 +154,14 @@ class AirCanvas {
 
     // Click to select objects
     sceneCanvas.addEventListener('click', (e) => this.onSceneClick(e));
+
+    // Brush size slider
+    const brushSlider = document.getElementById('brush-size-slider') as HTMLInputElement;
+    if (brushSlider) {
+      brushSlider.addEventListener('input', () => {
+        this.drawingCanvas.brushSize = parseFloat(brushSlider.value);
+      });
+    }
   }
 
   private setupButtonListeners(): void {
@@ -144,7 +169,6 @@ class AirCanvas {
     const clearAllBtn = document.getElementById('clear-all-btn');
     clearAllBtn?.addEventListener('click', () => {
       this.clearAll();
-      // Broadcast to peers
       if (this.multiplayer.isConnected()) {
         this.multiplayer.broadcast({ type: 'clear_all' });
       }
@@ -192,10 +216,110 @@ class AirCanvas {
     const previewExpandBtn = document.getElementById('preview-expand-btn');
     const cameraPreview = document.getElementById('camera-preview');
     previewExpandBtn?.addEventListener('click', (e) => {
-      e.stopPropagation(); // Prevent drag from starting
+      e.stopPropagation();
       cameraPreview?.classList.toggle('expanded');
-      // Update preview canvas size when expanded
       this.updatePreviewCanvasSize();
+    });
+
+    // Undo/Redo buttons
+    const undoBtn = document.getElementById('undo-btn');
+    undoBtn?.addEventListener('click', () => this.undoManager.undo());
+
+    const redoBtn = document.getElementById('redo-btn');
+    redoBtn?.addEventListener('click', () => this.undoManager.redo());
+
+    // Screenshot button
+    const screenshotBtn = document.getElementById('screenshot-btn');
+    screenshotBtn?.addEventListener('click', () => this.takeScreenshot());
+
+    // Sound toggle
+    const soundBtn = document.getElementById('sound-btn');
+    if (soundBtn) {
+      this.updateSoundButton(soundBtn);
+      soundBtn.addEventListener('click', () => {
+        this.audioManager.toggleMute();
+        this.updateSoundButton(soundBtn);
+      });
+    }
+  }
+
+  private updateSoundButton(btn: HTMLElement): void {
+    const icon = btn.querySelector('.icon');
+    if (icon) {
+      icon.textContent = this.audioManager.muted ? '🔇' : '🔊';
+    }
+  }
+
+  private updateUndoRedoButtons(): void {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) {
+      undoBtn.style.opacity = this.undoManager.canUndo() ? '1' : '0.4';
+      (undoBtn as HTMLButtonElement).disabled = !this.undoManager.canUndo();
+    }
+    if (redoBtn) {
+      redoBtn.style.opacity = this.undoManager.canRedo() ? '1' : '0.4';
+      (redoBtn as HTMLButtonElement).disabled = !this.undoManager.canRedo();
+    }
+  }
+
+  private setupKeyboardShortcuts(): void {
+    window.addEventListener('keydown', (e) => {
+      // Ctrl+Z = undo, Ctrl+Y or Ctrl+Shift+Z = redo
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          this.undoManager.undo();
+        } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          this.undoManager.redo();
+        }
+      }
+    });
+  }
+
+  private setupOnboarding(): void {
+    const seen = localStorage.getItem('aircanvas_onboarding_seen');
+    if (seen) return;
+
+    const overlay = document.getElementById('onboarding-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+
+    let currentStep = 0;
+    const steps = overlay.querySelectorAll('.onboarding-step');
+    const dots = overlay.querySelectorAll('.onboarding-dot');
+    const nextBtn = document.getElementById('onboarding-next');
+    const skipBtn = document.getElementById('onboarding-skip');
+
+    const showStep = (idx: number) => {
+      steps.forEach((s, i) => {
+        (s as HTMLElement).style.display = i === idx ? 'block' : 'none';
+      });
+      dots.forEach((d, i) => {
+        d.classList.toggle('active', i === idx);
+      });
+      if (nextBtn) {
+        nextBtn.textContent = idx === steps.length - 1 ? 'Get Started!' : 'Next';
+      }
+    };
+
+    showStep(0);
+
+    nextBtn?.addEventListener('click', () => {
+      currentStep++;
+      if (currentStep >= steps.length) {
+        overlay.style.display = 'none';
+        localStorage.setItem('aircanvas_onboarding_seen', 'true');
+      } else {
+        showStep(currentStep);
+      }
+    });
+
+    skipBtn?.addEventListener('click', () => {
+      overlay.style.display = 'none';
+      localStorage.setItem('aircanvas_onboarding_seen', 'true');
     });
   }
 
@@ -204,9 +328,7 @@ class AirCanvas {
     const expandBtn = document.getElementById('preview-expand-btn');
     if (!cameraPreview) return;
 
-    // Mouse events
     cameraPreview.addEventListener('mousedown', (e) => {
-      // Don't start drag if clicking on the expand button
       if (e.target === expandBtn) return;
       this.startPreviewDrag(e.clientX, e.clientY, cameraPreview);
     });
@@ -220,12 +342,10 @@ class AirCanvas {
       this.endPreviewDrag(cameraPreview);
     });
 
-    // Touch events
     cameraPreview.addEventListener('touchstart', (e) => {
-      // Don't start drag if touching the expand button
       if (e.target === expandBtn) return;
       if (e.touches.length === 1) {
-        e.preventDefault(); // Prevent scrolling
+        e.preventDefault();
         this.startPreviewDrag(e.touches[0].clientX, e.touches[0].clientY, cameraPreview);
       }
     }, { passive: false });
@@ -241,7 +361,6 @@ class AirCanvas {
       this.endPreviewDrag(cameraPreview);
     });
 
-    // Double-click to reset position
     cameraPreview.addEventListener('dblclick', (e) => {
       if (e.target === expandBtn) return;
       this.resetPreviewPosition(cameraPreview);
@@ -258,31 +377,22 @@ class AirCanvas {
     this.isPreviewDragging = true;
     this.previewDragStartX = clientX;
     this.previewDragStartY = clientY;
-
-    // Get current position
     const rect = preview.getBoundingClientRect();
     this.previewStartLeft = rect.left;
     this.previewStartTop = rect.top;
-
     preview.classList.add('dragging');
   }
 
   private movePreview(clientX: number, clientY: number, preview: HTMLElement): void {
     const deltaX = clientX - this.previewDragStartX;
     const deltaY = clientY - this.previewDragStartY;
-
     let newLeft = this.previewStartLeft + deltaX;
     let newTop = this.previewStartTop + deltaY;
-
-    // Constrain to viewport
     const rect = preview.getBoundingClientRect();
     const maxLeft = window.innerWidth - rect.width;
     const maxTop = window.innerHeight - rect.height;
-
     newLeft = Math.max(0, Math.min(newLeft, maxLeft));
     newTop = Math.max(0, Math.min(newTop, maxTop));
-
-    // Apply custom position (remove centered transform)
     preview.classList.add('custom-position');
     preview.style.left = `${newLeft}px`;
     preview.style.top = `${newTop}px`;
@@ -297,8 +407,6 @@ class AirCanvas {
 
   private updatePreviewCanvasSize(): void {
     const cameraPreview = document.getElementById('camera-preview');
-
-    // Get computed size of the preview container
     if (cameraPreview) {
       const rect = cameraPreview.getBoundingClientRect();
       this.previewCanvas.width = rect.width;
@@ -307,14 +415,12 @@ class AirCanvas {
   }
 
   private setupMultiplayer(): void {
-    // Initialize multiplayer
     this.multiplayer.initialize().then(() => {
       this.roomCodeDisplay.textContent = this.multiplayer.getRoomCode();
     }).catch(err => {
       console.error('Failed to initialize multiplayer:', err);
     });
 
-    // Handle status changes
     this.multiplayer.onStatusChange((status, message) => {
       this.statusDot.className = 'status-dot';
       if (status === 'connected') {
@@ -325,7 +431,6 @@ class AirCanvas {
       this.statusText.textContent = message;
     });
 
-    // Handle multiplayer events
     this.multiplayer.onEvent((event: MultiplayerEvent) => {
       this.handleMultiplayerEvent(event);
     });
@@ -334,19 +439,15 @@ class AirCanvas {
   private handleMultiplayerEvent(event: MultiplayerEvent): void {
     switch (event.type) {
       case 'balloon_created':
-        // Create balloon from peer's stroke
         this.objectManager.createFromStroke(event.strokeData);
         break;
-
       case 'clear_all':
         this.drawingCanvas.clearAll();
         this.objectManager.clearAll();
         break;
-
       case 'peer_joined':
         this.showStatus('Friend joined!', 2000);
         break;
-
       case 'peer_left':
         this.showStatus('Friend left', 2000);
         break;
@@ -373,7 +474,6 @@ class AirCanvas {
         }, 2000);
       }
     } catch {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = code;
       document.body.appendChild(textArea);
@@ -389,7 +489,6 @@ class AirCanvas {
       this.statusText.textContent = 'Please enter a 6-character code';
       return;
     }
-
     try {
       await this.multiplayer.joinRoom(code);
       this.showStatus('Connected!', 2000);
@@ -402,8 +501,6 @@ class AirCanvas {
     this.isDragging = true;
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
-
-    // Check if clicking on an object
     const hitObject = this.objectManager.getObjectAtPosition(e.clientX, e.clientY);
     if (hitObject) {
       this.selectedObject = hitObject;
@@ -412,18 +509,13 @@ class AirCanvas {
 
   private onMouseMove(e: MouseEvent): void {
     if (!this.isDragging) return;
-
     const deltaX = e.clientX - this.lastMouseX;
     const deltaY = e.clientY - this.lastMouseY;
-
     if (this.selectedObject) {
-      // Rotate the selected object
       this.objectManager.rotateObject(this.selectedObject, deltaX * 0.01, deltaY * 0.01);
     } else {
-      // Orbit the camera
       this.scene3D.orbitCamera(deltaX * 0.005, deltaY * 0.005);
     }
-
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
   }
@@ -443,7 +535,6 @@ class AirCanvas {
       this.isDragging = true;
       this.lastMouseX = e.touches[0].clientX;
       this.lastMouseY = e.touches[0].clientY;
-
       const hitObject = this.objectManager.getObjectAtPosition(
         e.touches[0].clientX,
         e.touches[0].clientY
@@ -456,16 +547,13 @@ class AirCanvas {
 
   private onTouchMove(e: TouchEvent): void {
     if (!this.isDragging || e.touches.length !== 1) return;
-
     const deltaX = e.touches[0].clientX - this.lastMouseX;
     const deltaY = e.touches[0].clientY - this.lastMouseY;
-
     if (this.selectedObject) {
       this.objectManager.rotateObject(this.selectedObject, deltaX * 0.01, deltaY * 0.01);
     } else {
       this.scene3D.orbitCamera(deltaX * 0.005, deltaY * 0.005);
     }
-
     this.lastMouseX = e.touches[0].clientX;
     this.lastMouseY = e.touches[0].clientY;
   }
@@ -479,16 +567,9 @@ class AirCanvas {
 
   private async init(): Promise<void> {
     try {
-      // Start hand tracking
       await this.handTracker.start((landmarks) => this.onHandResults(landmarks));
-
-      // Setup camera preview
       this.setupCameraPreview();
-
-      // Hide loading overlay
       this.loadingOverlay.classList.add('hidden');
-
-      // Start animation loop
       this.animate();
     } catch (error) {
       console.error('Failed to initialize:', error);
@@ -497,14 +578,11 @@ class AirCanvas {
   }
 
   private setupCameraPreview(): void {
-    // Get the video stream from the hand tracker and display in preview
     const webcam = document.getElementById('webcam') as HTMLVideoElement;
     if (webcam.srcObject) {
       this.previewVideo.srcObject = webcam.srcObject;
       this.previewVideo.play();
     }
-
-    // Set preview canvas size (4:3 ratio to match camera)
     this.previewCanvas.width = 320;
     this.previewCanvas.height = 240;
   }
@@ -512,7 +590,6 @@ class AirCanvas {
   private resize(): void {
     const width = window.innerWidth;
     const height = window.innerHeight;
-
     this.handTracker.setCanvasSize(width, height);
     this.drawingCanvas.resize(width, height);
     this.handVisualizer.resize(width, height);
@@ -525,30 +602,24 @@ class AirCanvas {
     this.handDetected = landmarks !== null;
     this.currentLandmarks = landmarks;
 
-    // Show/hide hand detection message
     if (!this.handDetected && wasDetected) {
       this.showStatus('Show your hand to begin');
     } else if (this.handDetected && !wasDetected) {
       this.hideStatus();
     }
 
-    // Render hand tracking on preview canvas
     this.renderPreviewOverlay(landmarks);
 
     if (!landmarks) {
-      // Pause drawing if hand leaves
       if (this.isDrawing) {
         this.isDrawing = false;
+        this.stopDrawSound();
       }
       return;
     }
 
-    // Detect gesture
     const gestureState = this.gestureDetector.detect(landmarks);
-
-    // Handle gesture
     this.handleGesture(gestureState, landmarks);
-
     this.lastGestureState = gestureState;
   }
 
@@ -559,12 +630,10 @@ class AirCanvas {
 
     if (!landmarks) return;
 
-    // Use uniform scaling to maintain aspect ratio (same as main screen)
     const scale = Math.min(previewWidth / window.innerWidth, previewHeight / window.innerHeight);
     const offsetX = (previewWidth - window.innerWidth * scale) / 2;
     const offsetY = (previewHeight - window.innerHeight * scale) / 2;
 
-    // Draw hand skeleton connections
     const connections = [
       [0, 1], [1, 2], [2, 3], [3, 4],
       [0, 5], [5, 6], [6, 7], [7, 8],
@@ -574,7 +643,6 @@ class AirCanvas {
       [5, 9], [9, 13], [13, 17]
     ];
 
-    // Scale line width and joint size based on preview size
     const uiScale = previewWidth / 320;
     this.previewCtx.strokeStyle = '#bee17d';
     this.previewCtx.lineWidth = 2 * uiScale;
@@ -582,14 +650,12 @@ class AirCanvas {
     for (const [from, to] of connections) {
       const start = landmarks.landmarks[from];
       const end = landmarks.landmarks[to];
-
       this.previewCtx.beginPath();
       this.previewCtx.moveTo(start.x * scale + offsetX, start.y * scale + offsetY);
       this.previewCtx.lineTo(end.x * scale + offsetX, end.y * scale + offsetY);
       this.previewCtx.stroke();
     }
 
-    // Draw joints
     this.previewCtx.fillStyle = '#bee17d';
     for (const lm of landmarks.landmarks) {
       this.previewCtx.beginPath();
@@ -605,44 +671,38 @@ class AirCanvas {
       case 'draw':
         this.handleDraw(indexTip);
         break;
-
       case 'pinch':
         this.handlePinch(landmarks);
         break;
-
       case 'palm':
         this.handlePalm();
         break;
-
       case 'swipe':
         this.handleSwipe(indexTip);
         break;
-
       default:
-        // Release grabbed object if gesture changes
         if (this.grabbedObject) {
           this.objectManager.releaseObject(this.grabbedObject);
+          this.audioManager.playReleaseSound();
           this.grabbedObject = null;
           this.lastPinchPosition = null;
         }
+        this.stopDrawSound();
         break;
     }
 
-    // Reset timers and clear live position if gesture changed
     if (this.lastGestureState && state.current !== this.lastGestureState.current) {
       this.palmHoldStart = 0;
-      // Clear live position when leaving draw mode
       if (this.lastGestureState.current === 'draw') {
         this.drawingCanvas.clearLivePosition();
+        this.stopDrawSound();
       }
     }
   }
 
   private handleDraw(position: { x: number; y: number }): void {
-    // Always update live position for real-time line feedback
     this.drawingCanvas.updateLivePosition(position);
 
-    // Check if poking an object
     const hitObject = this.objectManager.getObjectAtPosition(position.x, position.y);
     if (hitObject) {
       this.objectManager.pokeObject(hitObject);
@@ -650,45 +710,48 @@ class AirCanvas {
     }
 
     if (!this.isDrawing) {
-      // Start new stroke
       this.isDrawing = true;
       this.drawingCanvas.startStroke(position, this.currentColor);
+      this.audioManager.startDrawSound();
+      this.isPlayingDrawSound = true;
     } else {
-      // Continue stroke
       this.drawingCanvas.addPoint(position);
+      // Update draw sound based on velocity
+      this.audioManager.updateDrawSound(this.drawingCanvas.getVelocity());
     }
 
-    // Render immediately for lowest latency (don't wait for animation frame)
     this.drawingCanvas.render();
+  }
+
+  private stopDrawSound(): void {
+    if (this.isPlayingDrawSound) {
+      this.audioManager.stopDrawSound();
+      this.isPlayingDrawSound = false;
+    }
   }
 
   private handlePinch(landmarks: HandLandmarks): void {
     const pinchCenter = this.gestureDetector.getPinchCenter(landmarks);
 
     if (this.isDrawing) {
-      // Pause drawing but keep stroke
       this.isDrawing = false;
       this.drawingCanvas.pauseStroke();
+      this.stopDrawSound();
     }
 
-    // Check if grabbing an object
     if (!this.grabbedObject) {
       const hitObject = this.objectManager.getObjectAtPosition(pinchCenter.x, pinchCenter.y);
       if (hitObject) {
         this.grabbedObject = hitObject;
         this.objectManager.grabObject(hitObject);
+        this.audioManager.playGrabSound();
         this.lastPinchPosition = pinchCenter;
       }
     } else {
-      // Move and rotate grabbed object based on hand movement
       if (this.lastPinchPosition) {
         const deltaX = pinchCenter.x - this.lastPinchPosition.x;
         const deltaY = pinchCenter.y - this.lastPinchPosition.y;
-
-        // Move the object
         this.objectManager.moveGrabbedObject(this.grabbedObject, pinchCenter.x, pinchCenter.y);
-
-        // Rotate based on movement
         this.objectManager.rotateObject(this.grabbedObject, deltaX * 0.02, deltaY * 0.02);
       }
       this.lastPinchPosition = pinchCenter;
@@ -696,14 +759,13 @@ class AirCanvas {
   }
 
   private handlePalm(): void {
-    // Release any grabbed object
     if (this.grabbedObject) {
       this.objectManager.releaseObject(this.grabbedObject);
+      this.audioManager.playReleaseSound();
       this.grabbedObject = null;
       this.lastPinchPosition = null;
     }
 
-    // Track palm hold time
     if (this.palmHoldStart === 0) {
       this.palmHoldStart = performance.now();
     }
@@ -711,23 +773,27 @@ class AirCanvas {
     const holdDuration = performance.now() - this.palmHoldStart;
 
     if (holdDuration >= GESTURE.PALM_HOLD_TIME) {
-      // Close and inflate current stroke
       this.closeAndInflate();
       this.palmHoldStart = 0;
     }
   }
 
   private handleSwipe(position: { x: number; y: number }): void {
-    // Check if swiping on an object
     const hitObject = this.objectManager.getObjectAtPosition(position.x, position.y);
     if (hitObject) {
+      // Record for undo
+      const action = new RemoveBalloonAction(this.objectManager, hitObject);
+      this.undoManager.pushAction(action);
+
       this.objectManager.removeObject(hitObject);
+      this.audioManager.playSwooshSound();
     }
   }
 
   private async closeAndInflate(): Promise<void> {
     const stroke = this.drawingCanvas.closeStroke();
     this.drawingCanvas.clearLivePosition();
+    this.stopDrawSound();
 
     if (!stroke) {
       this.showStatus('Draw a larger shape', 1000);
@@ -735,19 +801,16 @@ class AirCanvas {
     }
 
     this.isDrawing = false;
+    this.audioManager.playInflateSound();
 
-    // Animate the closing
     const startTime = performance.now();
     const animate = () => {
       const elapsed = performance.now() - startTime;
       const progress = Math.min(elapsed / (TIMING.STROKE_CLOSE_PULSE * 1000), 1);
-
       this.drawingCanvas.renderClosingAnimation(stroke, progress);
-
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
-        // Create 3D balloon
         this.createBalloon(stroke);
       }
     };
@@ -755,14 +818,17 @@ class AirCanvas {
   }
 
   private async createBalloon(stroke: Stroke): Promise<void> {
-    // Clear the stroke from drawing canvas FIRST before creating 3D object
     this.drawingCanvas.removeCompletedStroke(stroke);
     this.drawingCanvas.clear();
 
     try {
-      await this.objectManager.createFromStroke(stroke);
+      const balloon = await this.objectManager.createFromStroke(stroke);
 
-      // Broadcast to peers
+      // Push to undo stack
+      const action = new CreateBalloonAction(this.objectManager, stroke);
+      action.setCreatedObject(balloon);
+      this.undoManager.pushAction(action);
+
       if (this.multiplayer.isConnected()) {
         this.multiplayer.broadcast({
           type: 'balloon_created',
@@ -779,7 +845,51 @@ class AirCanvas {
     this.showStatus('Clearing all...');
     this.drawingCanvas.clearAll();
     await this.objectManager.clearAll();
+    this.undoManager.clear();
     this.hideStatus();
+  }
+
+  private async takeScreenshot(): Promise<void> {
+    // Render the scene once more
+    this.scene3D.render();
+
+    // Composite canvases
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = width;
+    compositeCanvas.height = height;
+    const compositeCtx = compositeCanvas.getContext('2d')!;
+
+    // Background (dark)
+    compositeCtx.fillStyle = '#0a0f0a';
+    compositeCtx.fillRect(0, 0, width, height);
+
+    // 3D scene
+    const sceneCanvas = document.getElementById('scene-canvas') as HTMLCanvasElement;
+    compositeCtx.drawImage(sceneCanvas, 0, 0);
+
+    // Drawing canvas
+    const drawCanvas = document.getElementById('draw-canvas') as HTMLCanvasElement;
+    compositeCtx.drawImage(drawCanvas, 0, 0);
+
+    // Watermark
+    compositeCtx.save();
+    compositeCtx.globalAlpha = 0.5;
+    compositeCtx.fillStyle = '#bee17d';
+    compositeCtx.font = '14px Inter, sans-serif';
+    compositeCtx.textAlign = 'right';
+    compositeCtx.fillText('Air Canvas by Debojeet Bhowmick', width - 16, height - 16);
+    compositeCtx.restore();
+
+    // Download
+    const link = document.createElement('a');
+    link.download = `air-canvas-${Date.now()}.png`;
+    link.href = compositeCanvas.toDataURL('image/png');
+    link.click();
+
+    this.showStatus('Screenshot saved!', 2000);
   }
 
   private animate(): void {
@@ -792,11 +902,17 @@ class AirCanvas {
     // Update 3D objects
     this.objectManager.update(deltaTime, now / 1000);
 
-    // Render 3D scene
+    // Render 3D scene (includes particle update)
     this.scene3D.render();
 
     // Render drawing canvas
     this.drawingCanvas.render();
+
+    // Calculate palm hold progress for visualizer
+    let palmHoldProgress = 0;
+    if (this.palmHoldStart > 0) {
+      palmHoldProgress = Math.min((now - this.palmHoldStart) / GESTURE.PALM_HOLD_TIME, 1);
+    }
 
     // Render hand visualization
     const gestureState = this.lastGestureState || {
@@ -810,14 +926,14 @@ class AirCanvas {
       this.currentLandmarks,
       gestureState,
       this.currentColor,
-      deltaTime
+      deltaTime,
+      palmHoldProgress
     );
   }
 
   private showStatus(message: string, duration?: number): void {
     this.statusMessage.textContent = message;
     this.statusMessage.classList.add('visible');
-
     if (duration) {
       setTimeout(() => this.hideStatus(), duration);
     }

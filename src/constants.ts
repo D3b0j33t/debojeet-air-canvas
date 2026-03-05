@@ -37,18 +37,27 @@ export const LANDMARKS = {
 // Gesture detection thresholds
 export const GESTURE = {
   PINCH_THRESHOLD: 40,          // pixels between thumb and index tip
-  PALM_HOLD_TIME: 500,          // ms to hold palm for inflate
+  PALM_HOLD_TIME: 400,          // lowered ms to hold palm for inflate
   FIST_HOLD_TIME: 1000,         // ms to hold fist for clear
-  SWIPE_VELOCITY: 800,          // pixels/second for swipe detection
+  SWIPE_VELOCITY: 600,          // lowered pixels/second for swipe detection
   MIN_STROKE_LENGTH: 50,        // minimum stroke length in pixels
   FINGER_CURL_THRESHOLD: 0.6,   // ratio for determining if finger is curled
-  PALM_STABILITY_THRESHOLD: 30  // max movement for "still" palm
+  PALM_STABILITY_THRESHOLD: 40  // increased max movement for "still" palm since EMA smooths movement
 };
 
 // Stroke settings
 export const STROKE = {
   WIDTH: 10,
-  MIN_POINT_DISTANCE: 8     // higher = smoother lines, less jitter
+  WIDTH_MIN: 3,
+  WIDTH_MAX: 20,
+  VELOCITY_SCALE: 0.015,     // velocity → width mapping factor
+  MIN_POINT_DISTANCE: 8      // higher = smoother lines, less jitter
+};
+
+// Audio settings
+export const AUDIO = {
+  ENABLED_DEFAULT: true,
+  MASTER_VOLUME: 0.3
 };
 
 // Animation timings (in seconds)

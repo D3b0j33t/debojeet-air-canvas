@@ -36,11 +36,14 @@ export class HandTracker {
     this.canvasHeight = height;
   }
 
+  private smoothedLandmarks: Point2D[] | null = null;
+  private readonly EMA_ALPHA = 0.5; // Smoothing factor (0 = static, 1 = raw feed)
+
   private onResults(results: Results): void {
     if (!this.callback) return;
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      // Use the first detected hand (could enhance to prefer right hand)
+      // Use the first detected hand
       const landmarks = results.multiHandLandmarks[0];
       const worldLandmarks = results.multiHandWorldLandmarks?.[0];
 
@@ -50,6 +53,21 @@ export class HandTracker {
         y: lm.y * this.canvasHeight
       }));
 
+      // Apply EMA smoothing to reduce jitter
+      if (!this.smoothedLandmarks) {
+        // Initial frame: just use the raw coordinates
+        this.smoothedLandmarks = convertedLandmarks;
+      } else {
+        // Blend current frame with previous smoothed frame
+        this.smoothedLandmarks = convertedLandmarks.map((point, i) => {
+          const prev = this.smoothedLandmarks![i];
+          return {
+            x: prev.x + this.EMA_ALPHA * (point.x - prev.x),
+            y: prev.y + this.EMA_ALPHA * (point.y - prev.y)
+          };
+        });
+      }
+
       const convertedWorldLandmarks = worldLandmarks?.map((lm) => ({
         x: -lm.x,  // Mirror
         y: -lm.y,
@@ -57,10 +75,12 @@ export class HandTracker {
       }));
 
       this.callback({
-        landmarks: convertedLandmarks,
+        landmarks: this.smoothedLandmarks,
         worldLandmarks: convertedWorldLandmarks
       });
     } else {
+      // Hand lost: reset smoothing cache
+      this.smoothedLandmarks = null;
       this.callback(null);
     }
   }

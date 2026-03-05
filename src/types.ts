@@ -13,6 +13,7 @@ export interface Point3D {
 
 export interface Stroke {
   points: Point2D[];
+  widths: number[];       // per-point width for velocity-sensitive drawing
   color: string;
   width: number;
   closed: boolean;

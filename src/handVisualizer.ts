@@ -1,5 +1,5 @@
 import { HandLandmarks, GestureState } from './types';
-import { LANDMARKS, VISUAL } from './constants';
+import { LANDMARKS, VISUAL, GESTURE } from './constants';
 
 // Hand skeleton connections
 const HAND_CONNECTIONS = [
@@ -34,16 +34,35 @@ const HAND_CONNECTIONS = [
   [LANDMARKS.RING_MCP, LANDMARKS.PINKY_MCP]
 ];
 
+// Gesture name mappings for the HUD badge
+const GESTURE_INFO: Record<string, { label: string; emoji: string }> = {
+  'draw': { label: 'DRAW', emoji: '✏️' },
+  'pinch': { label: 'GRAB', emoji: '🤏' },
+  'palm': { label: 'INFLATE', emoji: '🎈' },
+  'fist': { label: 'FIST', emoji: '✊' },
+  'swipe': { label: 'SWIPE', emoji: '👋' },
+  'poke': { label: 'POKE', emoji: '👆' },
+  'none': { label: 'IDLE', emoji: '🖐️' },
+};
+
 export class HandVisualizer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private cursorPulse = 0;
+
+  // Gesture badge DOM element (managed externally, we just update it)
+  private gestureBadge: HTMLElement | null = null;
+  private progressRing: HTMLElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not get 2D context');
     this.ctx = ctx;
+
+    // Find or ignore badge elements (they may not exist yet)
+    this.gestureBadge = document.getElementById('gesture-badge');
+    this.progressRing = document.getElementById('palm-progress-ring');
   }
 
   resize(width: number, height: number): void {
@@ -59,27 +78,102 @@ export class HandVisualizer {
     landmarks: HandLandmarks | null,
     gestureState: GestureState,
     currentColor: string,
-    deltaTime: number
+    deltaTime: number,
+    palmHoldProgress: number = 0
   ): void {
     this.clear();
 
-    if (!landmarks) return;
+    // Update gesture badge
+    this.updateGestureBadge(gestureState, landmarks !== null);
+
+    if (!landmarks) {
+      this.updateProgressRing(0);
+      return;
+    }
 
     // Update cursor pulse
     this.cursorPulse += deltaTime * VISUAL.CURSOR_PULSE_SPEED;
 
     // Render hand skeleton (faint)
-    this.renderSkeleton(landmarks);
+    this.renderSkeleton(landmarks, gestureState);
 
     // Render cursor at index fingertip
     const indexTip = landmarks.landmarks[LANDMARKS.INDEX_TIP];
     this.renderCursor(indexTip.x, indexTip.y, currentColor, gestureState);
+
+    // Render pinch indicator when pinching
+    if (gestureState.current === 'pinch') {
+      this.renderPinchIndicator(landmarks, currentColor);
+    }
+
+    // Render palm hold progress
+    if (gestureState.current === 'palm' && palmHoldProgress > 0) {
+      this.renderPalmProgress(landmarks, palmHoldProgress, currentColor);
+    }
+    this.updateProgressRing(gestureState.current === 'palm' ? palmHoldProgress : 0);
   }
 
-  private renderSkeleton(landmarks: HandLandmarks): void {
+  private updateGestureBadge(state: GestureState, handDetected: boolean): void {
+    if (!this.gestureBadge) {
+      this.gestureBadge = document.getElementById('gesture-badge');
+    }
+    if (!this.gestureBadge) return;
+
+    if (!handDetected) {
+      this.gestureBadge.style.opacity = '0';
+      return;
+    }
+
+    const info = GESTURE_INFO[state.current] || GESTURE_INFO['none'];
+    this.gestureBadge.textContent = `${info.emoji} ${info.label}`;
+    this.gestureBadge.style.opacity = '1';
+
+    // Color the badge based on gesture
+    if (state.current === 'draw') {
+      this.gestureBadge.style.borderColor = 'rgba(74, 222, 128, 0.6)';
+    } else if (state.current === 'palm') {
+      this.gestureBadge.style.borderColor = 'rgba(251, 191, 36, 0.6)';
+    } else if (state.current === 'pinch') {
+      this.gestureBadge.style.borderColor = 'rgba(96, 165, 250, 0.6)';
+    } else if (state.current === 'swipe') {
+      this.gestureBadge.style.borderColor = 'rgba(248, 113, 113, 0.6)';
+    } else {
+      this.gestureBadge.style.borderColor = 'rgba(190, 225, 125, 0.3)';
+    }
+  }
+
+  private updateProgressRing(progress: number): void {
+    if (!this.progressRing) {
+      this.progressRing = document.getElementById('palm-progress-ring');
+    }
+    if (!this.progressRing) return;
+
+    const circle = this.progressRing.querySelector('.progress-circle') as SVGCircleElement;
+    if (!circle) return;
+
+    const circumference = 2 * Math.PI * 18; // r=18
+    const dashOffset = circumference * (1 - progress);
+    circle.style.strokeDashoffset = String(dashOffset);
+
+    this.progressRing.style.opacity = progress > 0 ? '1' : '0';
+  }
+
+  private renderSkeleton(landmarks: HandLandmarks, gestureState: GestureState): void {
     this.ctx.save();
-    this.ctx.globalAlpha = VISUAL.HAND_SKELETON_OPACITY;
-    this.ctx.strokeStyle = 'white';
+
+    // Slightly brighter skeleton during active gestures
+    const opacity = gestureState.current !== 'none'
+      ? VISUAL.HAND_SKELETON_OPACITY * 1.5
+      : VISUAL.HAND_SKELETON_OPACITY;
+    this.ctx.globalAlpha = Math.min(opacity, 0.6);
+
+    // Color skeleton based on gesture
+    let skeletonColor = 'white';
+    if (gestureState.current === 'draw') skeletonColor = '#4ade80';
+    else if (gestureState.current === 'pinch') skeletonColor = '#60a5fa';
+    else if (gestureState.current === 'palm') skeletonColor = '#fbbf24';
+
+    this.ctx.strokeStyle = skeletonColor;
     this.ctx.lineWidth = VISUAL.HAND_SKELETON_WIDTH;
     this.ctx.lineCap = 'round';
 
@@ -95,7 +189,7 @@ export class HandVisualizer {
     }
 
     // Draw joints as small circles
-    this.ctx.fillStyle = 'white';
+    this.ctx.fillStyle = skeletonColor;
     for (const landmark of landmarks.landmarks) {
       this.ctx.beginPath();
       this.ctx.arc(landmark.x, landmark.y, 3, 0, Math.PI * 2);
@@ -114,12 +208,17 @@ export class HandVisualizer {
     const isReadyToDraw = gestureState.current === 'draw' || gestureState.current === 'none';
     const pulseAmount = isReadyToDraw ? Math.sin(this.cursorPulse) * 0.3 + 1 : 1;
 
+    // Different cursor sizes for different gestures
+    let cursorScale = 1;
+    if (gestureState.current === 'pinch') cursorScale = 0.7;
+    else if (gestureState.current === 'palm') cursorScale = 1.5;
+
     this.ctx.save();
 
     // Outer glow
     const gradient = this.ctx.createRadialGradient(
       x, y, 0,
-      x, y, VISUAL.CURSOR_GLOW_SIZE * pulseAmount
+      x, y, VISUAL.CURSOR_GLOW_SIZE * pulseAmount * cursorScale
     );
     gradient.addColorStop(0, color);
     gradient.addColorStop(0.3, this.hexToRgba(color, 0.5));
@@ -127,7 +226,7 @@ export class HandVisualizer {
 
     this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
-    this.ctx.arc(x, y, VISUAL.CURSOR_GLOW_SIZE * pulseAmount, 0, Math.PI * 2);
+    this.ctx.arc(x, y, VISUAL.CURSOR_GLOW_SIZE * pulseAmount * cursorScale, 0, Math.PI * 2);
     this.ctx.fill();
 
     // Inner solid cursor
@@ -135,7 +234,7 @@ export class HandVisualizer {
     this.ctx.shadowColor = color;
     this.ctx.shadowBlur = 10;
     this.ctx.beginPath();
-    this.ctx.arc(x, y, VISUAL.CURSOR_SIZE / 2 * pulseAmount, 0, Math.PI * 2);
+    this.ctx.arc(x, y, VISUAL.CURSOR_SIZE / 2 * pulseAmount * cursorScale, 0, Math.PI * 2);
     this.ctx.fill();
 
     // Bright center
@@ -143,6 +242,78 @@ export class HandVisualizer {
     this.ctx.beginPath();
     this.ctx.arc(x, y, VISUAL.CURSOR_SIZE / 4, 0, Math.PI * 2);
     this.ctx.fill();
+
+    this.ctx.restore();
+  }
+
+  /** Draw line between thumb and index showing pinch strength */
+  private renderPinchIndicator(landmarks: HandLandmarks, _color: string): void {
+    const thumb = landmarks.landmarks[LANDMARKS.THUMB_TIP];
+    const index = landmarks.landmarks[LANDMARKS.INDEX_TIP];
+    const dist = Math.sqrt(
+      Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2)
+    );
+    const strength = 1 - Math.min(dist / GESTURE.PINCH_THRESHOLD, 1);
+
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.6;
+
+    // Gradient from green (far) to blue (close/pinched)
+    const gradient = this.ctx.createLinearGradient(thumb.x, thumb.y, index.x, index.y);
+    gradient.addColorStop(0, `rgba(96, 165, 250, ${strength})`);
+    gradient.addColorStop(1, `rgba(74, 222, 128, ${1 - strength})`);
+
+    this.ctx.strokeStyle = gradient;
+    this.ctx.lineWidth = 2 + strength * 3;
+    this.ctx.setLineDash([4, 4]);
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(thumb.x, thumb.y);
+    this.ctx.lineTo(index.x, index.y);
+    this.ctx.stroke();
+
+    this.ctx.restore();
+  }
+
+  /** Render a circular progress arc around the palm center */
+  private renderPalmProgress(landmarks: HandLandmarks, progress: number, color: string): void {
+    const wrist = landmarks.landmarks[LANDMARKS.WRIST];
+    const indexMcp = landmarks.landmarks[LANDMARKS.INDEX_MCP];
+    const pinkyMcp = landmarks.landmarks[LANDMARKS.PINKY_MCP];
+
+    const cx = (wrist.x + indexMcp.x + pinkyMcp.x) / 3;
+    const cy = (wrist.y + indexMcp.y + pinkyMcp.y) / 3;
+
+    const radius = 40;
+
+    this.ctx.save();
+
+    // Background ring
+    this.ctx.globalAlpha = 0.2;
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 3;
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    // Progress arc
+    this.ctx.globalAlpha = 0.8;
+    this.ctx.strokeStyle = '#fbbf24';
+    this.ctx.lineWidth = 4;
+    this.ctx.lineCap = 'round';
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+    this.ctx.stroke();
+
+    // Percentage text
+    if (progress > 0.1) {
+      this.ctx.globalAlpha = 0.9;
+      this.ctx.fillStyle = '#fbbf24';
+      this.ctx.font = '14px Inter, sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(`${Math.round(progress * 100)}%`, cx, cy);
+    }
 
     this.ctx.restore();
   }
@@ -159,7 +330,6 @@ export class HandVisualizer {
   }
 
   renderGestureIndicator(_gestureState: GestureState): void {
-    // Could add visual feedback for current gesture
-    // For example, show a pinch indicator when pinching
+    // Implemented via badge + canvas rendering now
   }
 }

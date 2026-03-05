@@ -20,6 +20,10 @@ export class ObjectManager {
     this.inflator.updateSize(width, height);
   }
 
+  setEnvMap(envMap: THREE.CubeTexture | null): void {
+    this.inflator.setEnvMap(envMap);
+  }
+
   async createFromStroke(stroke: Stroke): Promise<BalloonObject> {
     const mesh = this.inflator.createBalloonMesh(stroke);
 

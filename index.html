@@ -637,6 +637,223 @@
       user-select: none;
     }
 
+    /* ==================== NEW FEATURE STYLES ==================== */
+
+    /* Gesture Badge */
+    #gesture-badge {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 20px;
+      background: rgba(20, 30, 20, 0.85);
+      border: 1px solid rgba(190, 225, 125, 0.3);
+      border-radius: 25px;
+      color: #bee17d;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      transition: opacity 0.2s ease, border-color 0.3s ease;
+      z-index: 12;
+      pointer-events: none;
+    }
+
+    /* Palm Progress Ring (SVG overlay) */
+    #palm-progress-ring {
+      position: absolute;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 44px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 12;
+      pointer-events: none;
+    }
+    #palm-progress-ring .progress-bg {
+      fill: none;
+      stroke: rgba(190, 225, 125, 0.15);
+      stroke-width: 3;
+    }
+    #palm-progress-ring .progress-circle {
+      fill: none;
+      stroke: #fbbf24;
+      stroke-width: 3.5;
+      stroke-linecap: round;
+      stroke-dasharray: 113.097;  /* 2 * PI * 18 */
+      stroke-dashoffset: 113.097;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+
+    /* Secondary action bar (below main actions) */
+    .secondary-actions {
+      position: absolute;
+      top: 72px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+      z-index: 11;
+    }
+
+    .secondary-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: rgba(20, 30, 20, 0.7);
+      border: 1px solid rgba(190, 225, 125, 0.2);
+      border-radius: 50%;
+      color: #bee17d;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+    }
+    .secondary-btn:hover {
+      background: rgba(190, 225, 125, 0.15);
+      border-color: rgba(190, 225, 125, 0.5);
+      transform: scale(1.1);
+    }
+    .secondary-btn:disabled {
+      cursor: not-allowed;
+    }
+
+    /* Brush size slider */
+    .brush-size-control {
+      position: absolute;
+      top: 50%;
+      left: 24px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      z-index: 11;
+    }
+    .brush-label {
+      color: rgba(190, 225, 125, 0.6);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    #brush-size-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100px;
+      height: 4px;
+      background: rgba(190, 225, 125, 0.2);
+      border-radius: 2px;
+      outline: none;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+    #brush-size-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #bee17d;
+      cursor: pointer;
+      border: 2px solid rgba(20, 30, 20, 0.8);
+      box-shadow: 0 0 8px rgba(190, 225, 125, 0.4);
+    }
+
+    /* Onboarding overlay */
+    #onboarding-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+    .onboarding-card {
+      background: linear-gradient(145deg, #1a2a1a 0%, #0d120d 100%);
+      border: 1px solid rgba(190, 225, 125, 0.3);
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    }
+    .onboarding-emoji {
+      font-size: 56px;
+      margin-bottom: 16px;
+    }
+    .onboarding-title {
+      color: #bee17d;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .onboarding-desc {
+      color: rgba(190, 225, 125, 0.75);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .onboarding-dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .onboarding-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(190, 225, 125, 0.2);
+      transition: background 0.3s ease;
+    }
+    .onboarding-dot.active {
+      background: #bee17d;
+    }
+    .onboarding-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+    .onboarding-next-btn {
+      padding: 12px 32px;
+      background: rgba(190, 225, 125, 0.2);
+      border: 1px solid rgba(190, 225, 125, 0.4);
+      border-radius: 25px;
+      color: #bee17d;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .onboarding-next-btn:hover {
+      background: rgba(190, 225, 125, 0.3);
+    }
+    .onboarding-skip-btn {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      color: rgba(190, 225, 125, 0.5);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: color 0.2s ease;
+    }
+    .onboarding-skip-btn:hover {
+      color: rgba(190, 225, 125, 0.8);
+    }
+
     /* ==================== RESPONSIVE STYLES ==================== */
 
     /* Tablet */
@@ -953,6 +1170,28 @@
         </button>
       </div>
 
+      <!-- Secondary actions (undo, redo, screenshot, sound) -->
+      <div class="secondary-actions">
+        <button class="secondary-btn" id="undo-btn" title="Undo (Ctrl+Z)" style="opacity:0.4" disabled>
+          <span class="icon">↩️</span>
+        </button>
+        <button class="secondary-btn" id="redo-btn" title="Redo (Ctrl+Y)" style="opacity:0.4" disabled>
+          <span class="icon">↪️</span>
+        </button>
+        <button class="secondary-btn" id="screenshot-btn" title="Screenshot">
+          <span class="icon">📸</span>
+        </button>
+        <button class="secondary-btn" id="sound-btn" title="Toggle Sound">
+          <span class="icon">🔊</span>
+        </button>
+      </div>
+
+      <!-- Brush size slider -->
+      <div class="brush-size-control">
+        <span class="brush-label">Brush</span>
+        <input type="range" id="brush-size-slider" min="0.3" max="3" step="0.1" value="1">
+      </div>
+
       <!-- Color palette -->
       <div id="color-palette">
         <div class="color-swatch active" data-color="#FFB3BA" style="background: #FFB3BA;"></div>
@@ -989,6 +1228,15 @@
       </div>
 
       <div id="status-message"></div>
+
+      <!-- Gesture badge -->
+      <div id="gesture-badge">🖐️ IDLE</div>
+
+      <!-- Palm progress ring -->
+      <svg id="palm-progress-ring" viewBox="0 0 44 44">
+        <circle class="progress-bg" cx="22" cy="22" r="18" />
+        <circle class="progress-circle" cx="22" cy="22" r="18" />
+      </svg>
 
       <div class="decorative-text">create with your hands</div>
     </div>
@@ -1030,6 +1278,36 @@
     <div id="loading-overlay">
       <div class="loading-spinner"></div>
       <div class="loading-text">Initializing hand tracking...</div>
+    </div>
+
+    <!-- Onboarding overlay -->
+    <div id="onboarding-overlay">
+      <div class="onboarding-card">
+        <div class="onboarding-step" style="display:block">
+          <div class="onboarding-emoji">☝️</div>
+          <div class="onboarding-title">Point to Draw</div>
+          <div class="onboarding-desc">Extend your index finger while keeping other fingers curled. Move your hand to draw shapes in the air!</div>
+        </div>
+        <div class="onboarding-step" style="display:none">
+          <div class="onboarding-emoji">🖐️</div>
+          <div class="onboarding-title">Palm to Inflate</div>
+          <div class="onboarding-desc">Open your palm and hold still for a moment. Your drawing will close, inflate, and become a 3D balloon object!</div>
+        </div>
+        <div class="onboarding-step" style="display:none">
+          <div class="onboarding-emoji">🤏</div>
+          <div class="onboarding-title">Pinch to Grab</div>
+          <div class="onboarding-desc">Pinch your thumb and index finger together to grab and move balloon objects around in 3D space. Swipe fast to delete!</div>
+        </div>
+        <div class="onboarding-dots">
+          <div class="onboarding-dot active"></div>
+          <div class="onboarding-dot"></div>
+          <div class="onboarding-dot"></div>
+        </div>
+        <div class="onboarding-actions">
+          <button class="onboarding-skip-btn" id="onboarding-skip">Skip</button>
+          <button class="onboarding-next-btn" id="onboarding-next">Next</button>
+        </div>
+      </div>
     </div>
   </div>
 
